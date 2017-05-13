@@ -20,7 +20,7 @@ def str2dict(s):
 def list2str(elems, sep, proc_fn=(lambda x: x)):
 	return sep.join([proc_fn(s) for s in elems])
 
-def findDictByAttr(dict_list, attr_name, val):
+def find_dict_by_attr(dict_list, attr_name, val):
 	result = None
 	# Look for current queue ref in metadata
 	for q in dict_list:
@@ -29,7 +29,7 @@ def findDictByAttr(dict_list, attr_name, val):
 			break
 	return result
 
-def capitalizeStr(src, trim_underscores=True, camel=False):
+def capitalize_str(src, trim_underscores=True, camel=False):
 	words = split_vals(src, "_")
 	result = ""
 	if camel:

@@ -5,12 +5,12 @@ import re
 from fsm_utils import split_vals
 from fsm_utils import str2dict
 from fsm_utils import list2str
-from fsm_utils import findDictByAttr
+from fsm_utils import find_dict_by_attr
 
-def findSection(sec_name, line, metadata):
+def find_section(sec_name, line, metadata):
 	return metadata["regexp"][sec_name].match(line)
 
-def appendThread(metadata, thread_name, actor_name=""):
+def append_thread(metadata, thread_name, actor_name=""):
 	if not metadata.has_key("threads"):
 		metadata["threads"] = set()
 	result_name = thread_name
@@ -24,14 +24,14 @@ def parse(file_name, metadata) :
 		try:
 			infile.seek(0)
 			init_regexp(metadata)
-			proc_fn = parseSection("", metadata)
+			proc_fn = parse_section("", metadata)
 			for line in infile:
 				# Skip empty lines and block comments ( # )
-				if len(line.strip()) == 0 or findSection("block_comment", line, metadata):
+				if len(line.strip()) == 0 or find_section("block_comment", line, metadata):
 					continue
 				proc_fn = proc_fn(line, metadata)
 				#print "new state: %s" % proc_fn
-			# printParseResults(metadata)
+			# print_parse_results(metadata)
 		finally:
 			infile.close()
 	except IOError:
@@ -55,24 +55,24 @@ def init_regexp(metadata):
 	metadata["regexp"] = regexp_dict
 
 
-def parseSection(line, metadata):
+def parse_section(line, metadata):
 	# I haven't decided yet what to do with the section "messages"
 	# It can be useful in case of describing message attributes
-	# if findSection("messages", line, metadata):
+	# if find_section("messages", line, metadata):
 	# 	if string.find(line, "{") >= 0:
 	# 		# Open brace is on the same line
 	# 		return parseMessages_Continue
 	# 	else:
 	# 		return parseMessages
 
-	if findSection("queues", line, metadata):
-		return parseQueueList
+	if find_section("queues", line, metadata):
+		return parse_queue_list
 
-	elif findSection("fsm_list", line, metadata):
-		return parseFsmList
+	elif find_section("fsm_list", line, metadata):
+		return parse_fsm_list
 
 	else:
-		return parseSection
+		return parse_section
 
 
 # def parseMessages(line, metadata):
@@ -82,7 +82,7 @@ def parseSection(line, metadata):
 # 		metadata["messages"] = split_vals(m.group(2), ",", True)
 	
 # 		if string.find(line, "}") >= 0:
-# 			result = parseSection
+# 			result = parse_section
 # 		else:
 # 			result = parseMessages_Continue
 # 	else:
@@ -93,7 +93,7 @@ def parseSection(line, metadata):
 # def parseMessages_Continue(line, metadata):
 # 	result = None
 
-# 	if findSection("queues", line, metadata) or findSection("fsm_list", line, metadata):
+# 	if find_section("queues", line, metadata) or find_section("fsm_list", line, metadata):
 # 		raise Exception("Closing brace \"}\" for the section \"messages\" was not found")
 
 # 	m = re.match(r"([^}]*)(\s*\}?\s*)", line)
@@ -105,66 +105,66 @@ def parseSection(line, metadata):
 # 			metadata["messages"] = add_list
 
 # 		if string.find(line, "}") >= 0:
-# 			result = parseSection
+# 			result = parse_section
 # 		else:
 # 			result = parseMessages_Continue
 
 # 	return result
 
 
-def parseQueueList(line, metadata):
-	m = findSection("queue", line, metadata)
+def parse_queue_list(line, metadata):
+	m = find_section("queue", line, metadata)
 	if m == None:
 		raise Exception("Expected \"<TAB>queue {...} \", got: %s" % line)
 	else:
-		return parseQueue(line, metadata)	
+		return parse_queue(line, metadata)	
 
-def parseQueue(line, metadata):
-	m = findSection("queue", line, metadata)
+def parse_queue(line, metadata):
+	m = find_section("queue", line, metadata)
 	if m == None:
-		# parseSection must know what to do with that stuff
-		return parseSection(line, metadata)
+		# parse_section must know what to do with that stuff
+		return parse_section(line, metadata)
 	else:
 		queue_dict = str2dict(m.group(2))
 		if "queues" in metadata:
 			metadata["queues"].append(queue_dict)
 		else:
 			metadata["queues"] = [queue_dict]
-		#appendThread(metadata, queue_dict["thread"], queue_dict["name"])
+		#append_thread(metadata, queue_dict["thread"], queue_dict["name"])
 		metadata["curr_queue"] = queue_dict["name"]
-		return parseBoundFsm
+		return parse_bound_fsm
 
-def parseBoundFsm(line, metadata):
+def parse_bound_fsm(line, metadata):
 	# Possible Patterns: 
 	#   case #1 \t\tbound fsm: { fsm1, fsm2}
 	#   case #2 \t\tbound fsm: { fsm1,
     #   case #3 \t\tbound fsm: {
     #   case #4 \t\tbound fsm:
-	m = findSection("bound_fsm", line, metadata)
+	m = find_section("bound_fsm", line, metadata)
 	if m == None:
-		return parseQueue(line, metadata)
+		return parse_queue(line, metadata)
 	else:
 		chunk = line
 		if line.find("{") >= 0:
 			# Trim "\t\tbound fsm: "
 			chunk = re.search(r"\t\tbound fsm:(.*)", line).group(1)
-			return parseBoundFsm_Content(chunk, metadata)
+			return parse_bound_fsm_content(chunk, metadata)
 		else:
 			# Case #4, no need to trim, just go to a next line
-			return parseBoundFsm_Content
+			return parse_bound_fsm_content
 
-def parseBoundFsm_Content(line, metadata):
-	m = findSection("bound_fsm_content", line, metadata)
+def parse_bound_fsm_content(line, metadata):
+	m = find_section("bound_fsm_content", line, metadata)
 	if m == None:
 		raise Exception("Expected \"<TAB><TAB>bound fsm: { [<ENTER>]fsm1, [<ENTER>]fsm2, ... }\", got: %s" % line)
 	else:
 		result = None
 		if line.find("}") >= 0:
-			result = parseQueue
+			result = parse_queue
 		else:
-			result = parseBoundFsm_Content
+			result = parse_bound_fsm_content
 		# Look for current queue ref in metadata
-		curr_queue = findDictByAttr(metadata["queues"], "name", metadata["curr_queue"])
+		curr_queue = find_dict_by_attr(metadata["queues"], "name", metadata["curr_queue"])
 		if curr_queue == None:
 			raise Exception("Integrity violation: couldn't find queue for \"curr_queue\"=%s" % metadata["curr_queue"])
 
@@ -176,54 +176,54 @@ def parseBoundFsm_Content(line, metadata):
 	return result
 
 
-def parseFsmList(line, metadata):
-	m = findSection("fsm", line, metadata)
+def parse_fsm_list(line, metadata):
+	m = find_section("fsm", line, metadata)
 	if m == None:
 		raise Exception("Expected \"<TAB>fsm {...}\", got %s" % line)
 	else:
-		return parseFsm(line, metadata)
-	return parseSection
+		return parse_fsm(line, metadata)
+	return parse_section
 
-def parseFsm(line, metadata):
-	m = findSection("fsm", line, metadata)
+def parse_fsm(line, metadata):
+	m = find_section("fsm", line, metadata)
 	if m == None:
-		# parseSection must know what to do with that stuff
-		return parseSection
+		# parse_section must know what to do with that stuff
+		return parse_section
 	else:
 		fsm_dict = str2dict(m.group(2))
 		if not metadata.has_key("fsm_list"):
 			metadata["fsm_list"] = []
 		metadata["fsm_list"].append(fsm_dict)
 		metadata["curr_fsm"] = fsm_dict["name"]
-		#appendThread(metadata, fsm_dict["thread"], fsm_dict["name"])
-		return parseState
+		#append_thread(metadata, fsm_dict["thread"], fsm_dict["name"])
+		return parse_state
 
-def parseState(line, metadata):
-	m = findSection("state", line, metadata)
+def parse_state(line, metadata):
+	m = find_section("state", line, metadata)
 	if m == None:
-		if findSection("fsm", line, metadata):
+		if find_section("fsm", line, metadata):
 			# go to a next FSM
-			return parseFsm(line, metadata)
+			return parse_fsm(line, metadata)
 		else:
 			# FSM definitions has been ended 
-			return parseSection(line, metadata)
+			return parse_section(line, metadata)
 	else:
-		curr_fsm = findDictByAttr(metadata["fsm_list"], "name", metadata["curr_fsm"])
+		curr_fsm = find_dict_by_attr(metadata["fsm_list"], "name", metadata["curr_fsm"])
 		state = str2dict(m.group(2))
 		if not curr_fsm.has_key("states"):
 			curr_fsm["states"] = []
 		curr_fsm["states"].append(state)
 		# remember current state of current fsm
 		metadata["curr_state"] = state["name"]
-		return parseTransition
+		return parse_transition
 
-def parseTransition(line, metadata):
-	m = findSection("trans", line, metadata)
+def parse_transition(line, metadata):
+	m = find_section("trans", line, metadata)
 	if m == None:
 		# go to a next state
-		return parseState(line, metadata)
+		return parse_state(line, metadata)
 	else:
-		curr_fsm = findDictByAttr(metadata["fsm_list"], "name", metadata["curr_fsm"])
+		curr_fsm = find_dict_by_attr(metadata["fsm_list"], "name", metadata["curr_fsm"])
 		msg = m.group(2)
 		if not curr_fsm.has_key("acpt_msg"):
 			curr_fsm["acpt_msg"] = set() 
@@ -236,23 +236,23 @@ def parseTransition(line, metadata):
 		transition = {}
 		transition["msg"] = msg
 		# parse right-hand-side of a current transition statement
-		rhs_m = findSection("trans_rhs", m.group(4), metadata)
+		rhs_m = find_section("trans_rhs", m.group(4), metadata)
 		if rhs_m == None:
 			# only destination declared, no additional attributes
-			_parseTransDest(m.group(4), transition)
+			_parse_trans_dest(m.group(4), transition)
 		else:
 			# destination ; additional attributes (like "handler", "comment")
-			_parseTransDest(rhs_m.group(1), transition)
+			_parse_trans_dest(rhs_m.group(1), transition)
 			transition.update(str2dict(rhs_m.group(3)).items())
 
-		curr_state = findDictByAttr(curr_fsm["states"], "name", metadata["curr_state"])
+		curr_state = find_dict_by_attr(curr_fsm["states"], "name", metadata["curr_state"])
 		if curr_state.has_key("trans"):
 			curr_state["trans"].append(transition)
 		else:
 			curr_state["trans"] = [transition]
-		return parseTransition
+		return parse_transition
 
-def _parseTransDest(chunk, transition):
+def _parse_trans_dest(chunk, transition):
 	pair = split_vals(chunk, "=")
 	if len(pair) == 1:
 		transition["type"] = "straight"
@@ -263,7 +263,7 @@ def _parseTransDest(chunk, transition):
 	else:
 		raise Exception("Wrong state transition format on the right side of \"=>\":%s" % chunk)
 
-def printParseResults(metadata):
+def print_parse_results(metadata):
 	print "parse results:"
 	print "messages: " 
 	print "\t" + list2str(metadata["messages"], "\n\t") 
