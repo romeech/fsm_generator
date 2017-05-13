@@ -1,0 +1,81 @@
+key words:
+default
+handler
+global_handler
+separated
+remains
+
+messages: {
+	 barcode_data, sc_data, card_is_invalid, validate_document, show_text,
+	 gate_open, gate_closed, gate_timeout 
+}
+queues:
+	queue { name=bl_in, with_timers=true } :
+		bound fsm: { passing_controller, smart_card_reader, static doc_keeper }
+	queue { name=bl_out, with_timers=true } :
+		bound fsm: { passing_controller, smart_card_reader, static doc_keeper }
+	queue { name=hub_reqs, with_timers=true }:
+		bound fsm: { static doc_keeper, static hub_communication}
+	queue { name=net, with_timers=false }:
+		bound fsm: { static hub_communication, hub_transport}
+fsms: 
+	fsm { name=passing_controller, type=multi, state_changed_handler=true } :
+		state { name=wait_for_document, begin=BeforeWaitForDoc, end=AfterWaitForDoc } :
+			# trans format: msg <msg_name> => <state_name>|handler=<h_name>|common_handler=<gh_name> ; [handler=<handler_name>] [comment=<text>]
+			msg barcode_data      => changer=processBarcode
+			msg sc_data           => changer=processSmartCard
+			msg card_is_invalid   => wait_external_board; handler=processCardIsInvalid
+			msg gate_sync_lock    => wait_other_loop; comment="other loop is accepting document"
+			msg graceful_shutdown => remains; handler=processShutdown
+			msg default           => common_changer=processCommon
+
+		state { name=wait_sc_doc_validation } :
+			msg document_valid   => changer=processDocValid
+			msg document_invalid => changer=processDocInvalid; common_handler=clearDocs
+			msg sc_cancelled     => wait_sc_cycle_exits; handler=processScCancelled
+			msg default          => common_changer=processCommon
+
+		state { name=wait_bc_doc_validation } :
+			msg document_valid   => changer=processDocValid
+			msg document_invalid => changer=processDocInvalid
+			msg default          => common_changer=processCommon
+
+		state { name=wait_pass_mark_written } :
+			msg sc_mark_is_written => wait_for_passing; handler=processMarIsWritten
+			msg sc_mark_write_failure => changer=processPassMarkWriteFailure
+			msg sc_cancelled => changer=processScCanceld
+			msg default => common_changer=processCommon
+
+		state { name=wait_for_passing } :
+			msg user_passed => wait_for_document
+			msg user_pass_timeout => wait_for_document
+			msg default => common_changer=processCommon
+
+	fsm { name=smart_card_reader, type=multi, state_changed_handler=false} :
+		state { name=wait_for_card }:
+			msg check_card => wait_card_activated; handler=processCheckCard
+			msg sc_stop => suspended
+			msg td_accepted => suspended
+			msg default => remains
+		state { name=wait_card_activated }:
+			msg card_activated_resp => changer=processCardActivated
+			msg sc_stop => suspended
+			msg td_accepted => suspended
+			msg default => remains
+		state { name=wait_read_auth }:
+			msg card_read_auth_resp => changer=processReadAuthResp
+			msg sc_stop => suspended
+			msg td_accepted => suspended
+			msg default => remains
+		state { name=wait_read_block }:
+			msg card_read_block_resp => changer=processReadBlockResp
+			msg sc_stop => suspended
+			msg td_accepted => suspended
+			msg default => remains
+		state { name=wait_sc_accepted }:
+			msg sc_accepted => wait_sc_validation
+			msg sc_stop => suspended
+			msg td_accepted => suspended
+			msg default => remains
+
+	# fsm { name=device_manager, type=single} :
